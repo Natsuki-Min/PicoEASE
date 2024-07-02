@@ -1,4 +1,3 @@
-Certainly! Here's a markdown-enhanced version of the provided text:
 
 ---
 
