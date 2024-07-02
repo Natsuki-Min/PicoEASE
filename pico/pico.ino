@@ -523,6 +523,7 @@ void flashwritemode(uint32_t offset) {
         }
         delayMicroseconds(30);
       }
+      Serial.println("OK");
     }
   }
   if (pread(0x67) == 0x1) {
