@@ -1,0 +1,13 @@
+.program piotrig
+
+.wrap_target
+begin:
+wait 0 pin 0
+wait 1 pin 0
+jmp pin then
+jmp begin
+then:
+;irq set 0
+set pins 1
+jmp begin
+.wrap

@@ -1,0 +1,26 @@
+.program ws2812
+.side_set 1 opt
+.wrap_target
+begin:
+pull block
+set x,7   
+loop1:         
+out pins,1 side 0   
+jmp x-- loop1 side 1 
+jmp  pin read    
+set x 15  
+loop2:           
+out pins,1 side 0    
+jmp x-- loop2 side 1               
+jmp begin        
+read:
+set pindirs,0 side 1  
+set x,14 side 0 
+loop3:
+in pins,1 side 1  
+jmp x-- loop3 side 0     
+in pins,1 side 1      
+push  noblock           
+set pindirs,1     
+jmp begin
+.wrap

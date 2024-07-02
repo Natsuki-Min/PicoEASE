@@ -1,0 +1,20 @@
+.program pioread
+
+.wrap_target
+begin:
+push noblock
+set x 23
+loop1:
+wait 0 pin 1
+jmp pin then
+wait 1 pin 1
+in pins 1
+jmp x-- loop1
+jmp begin
+then:
+set pins 0
+loop2:
+in pins 1
+jmp x-- loop2
+jmp begin
+.wrap
