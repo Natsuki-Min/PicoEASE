@@ -35,7 +35,7 @@
 - **'D'**
   - Erase all the Flash.
 - **'Q \<address\>'**
-  - Enter flash writing mode. When in this mode, just type HEX (must be 2-byte alignment, must be below 1kb) and enter like `"ABCDEF1234567890\n"`, it will write to the flash and automatically increase the address. "Q\n" for exit.
+  - Enter flash writing mode. When in this mode, just type HEX (must be 2-byte alignment, must be below 1kb) and enter like `"ABCDEF1234567890\n"`, it will write to the flash and automatically increase the address. `"Q\n"` for exit.
 
 ### picolistening
 - gpio2-p152 (sda)
