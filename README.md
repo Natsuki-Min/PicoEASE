@@ -27,7 +27,7 @@ Certainly! Here's a markdown-enhanced version of the provided text:
   - e.g. F00CD000 for `lea 0xd000`, E3009050 for `l r0 [ea+]`
 - **'A \<address\> \<length\>'**
   - Read Flash from the given address for the specified bytes (2 bytes alignment) in Intel HEX format.
-***Caution!*** The following commands need VPP supply! Due to the auto increase address, the length can't be larger than one segment, otherwise it will loop back. Also include 'Q' command e.g. 1FFFF+1 -> 10000.
+- ***Caution!*** The following commands need VPP supply! Due to the auto increase address, the length can't be larger than one segment, otherwise it will loop back. Also include 'Q' command e.g. 1FFFF+1 -> 10000.
 - **'E \<address\>'**
   - Erase one block where the address is. One block is the size of 0x4000 in cw1.
 - **'F \<address\> \<length\>'**
