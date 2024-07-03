@@ -21,7 +21,7 @@
   - Read the given address (Register)
 - **'T \<div\>'**
   - Modify the speed of the communication
-- **'C \<command\>'**
+- **'X \<command\>'**
   - Run an assembly command (or two) and return the EA and R0's data. It's used to read and write the RAM.
   - e.g. F00CD000 for `lea 0xd000`, E3009050 for `l r0 [ea+]`
 - **'A \<address\> \<length\>'**
