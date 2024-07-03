@@ -35,7 +35,7 @@
 - **'D'**
   - Erase all the Flash.
 - **'C \<address\> \<data\>'**
-  -Write 2bytes to the address
+  - Write 2bytes to the address
 - **'Q \<address\>'**
   - Enter flash writing mode. When in this mode, just type HEX (must be 2-byte alignment, must be below 1kb) and enter like `"ABCDEF1234567890\n"`, it will write to the flash and automatically increase the address. `"Q\n"` for exit.
 
