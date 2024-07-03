@@ -1,4 +1,3 @@
-
 #include "hardware/pio.h"
 #include <pico.h>
 #define PIN_SCL 3u
@@ -97,16 +96,18 @@ void loop() {
         Serial.print("EA:0x");
         Serial.println(result & 0xFFFF, HEX);
       } else if (pcommandType == 'C') {
-        uint16_t arr[1];
-        arr[0] = pdata & 0xFFFF;
+        uint8_t arr[2];
+        arr[0] = pdata & 0xFF;
+        arr[1] = pdata >> 8;
         flashwrite(paddress, 1, arr);
       } else if (pcommandType == 'D') {
-
         flasheraseall();
       } else if (pcommandType == 'Q') {
-
         flashwritemode(paddress);
-      }
+      } /*else if (pcommandType == 'I') {
+        flashwrite(paddress, 0x10000/2, binary_data_3);
+      }*/
+      Serial.println("Done");
     }
   }
 }
@@ -258,14 +259,11 @@ void CSRRead(uint32_t addroffset, size_t dataSize) {
   Serial.print("000");
   Serial.println(intToHexString((uint8_t)(~(0x04 + ((uint8_t)(segment & 0xF) << 4)) + 1), 2));
   while (dataSize > (size_t)(0x10000 - addr)) {
-
     bin2hex(addroffset, 0x10000 - addr);
-
     dataSize -= (size_t)(0x10000 - addr);
     addroffset += (size_t)(0x10000 - addr);
     segment = addroffset >> 16;
     addr = addroffset & 0xFFFF;
-
     Serial.print(":02000002");
     Serial.print(intToHexString(segment, 1));
     Serial.print("000");
@@ -283,7 +281,6 @@ void bin2hex(uint32_t addroffset, size_t dataSize) {
     i = 0;
     sum = 0;
     size_t chunkSize = min(16, dataSize - index);
-
     for (size_t j = 0; j < chunkSize; j = j + 2) {
       pwrite(0x61, 0x1);
       uint16_t rd = pread(0x66);
@@ -291,21 +288,16 @@ void bin2hex(uint32_t addroffset, size_t dataSize) {
       record[j + 1] = rd >> 8;
       sum += (record[j] + record[j + 1]);
     }
-
     sum = sum + chunkSize + ((uint8_t)(addr >> 8)) + ((uint8_t)addr);
-
     Serial.print(':');
     Serial.print(intToHexString(chunkSize, 2));
     Serial.print(intToHexString(addr, 4));
     Serial.print("00");
-
     for (size = 0; size < chunkSize; ++size) {
       Serial.print(intToHexString(record[size], 2));
     }
-
     Serial.print(intToHexString((unsigned char)(-sum), 2));
     Serial.println();
-
     addr += 0x10;
   }
 }
@@ -341,7 +333,8 @@ void flasherase(uint32_t block) {
   int j;
   j = 0;
   while ((pread(0x61) != 0x5) && (j < TIMEOUT)) { j++; }
-  while ((pread(0x62) != 0x1F) && (j < TIMEOUT)) { j++; }
+  uint16_t value;
+  while (((value = pread(0x62)) != 0x1F && value != 0x101F) && (j < TIMEOUT)) { j++; }
   pwrite(0x60, 0x0);
   pwrite(0x61, 0x0);
   delay(50);
@@ -367,10 +360,10 @@ void flasheraseall() {
     pwrite(0x63, block >> 16);
     pwrite(0x64, block & 0xFFFF); /*write addr*/
     pwrite(0x61, 0x5);            /*begin*/
-
     j = 0;
     while ((pread(0x61) != 0x5) && (j < TIMEOUT)) { j++; }
-    while ((pread(0x62) != 0x1F) && (j < TIMEOUT)) { j++; }
+    uint16_t value;
+    while (((value = pread(0x62)) != 0x1F && value != 0x101F) && (j < TIMEOUT)) { j++; }
     pwrite(0x60, 0x0);
     pwrite(0x61, 0x0);
     delay(50);
@@ -383,7 +376,7 @@ void flasheraseall() {
     Serial.println("fail");
   }
 }
-void flashwrite(uint32_t offset, uint32_t dataSize, uint16_t* data) {
+void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t* data) {
   rst();
   if (pread(0x67) == 0x0) {
     pwrite(0x67, 0x1); /*unlock*/
@@ -394,7 +387,8 @@ void flashwrite(uint32_t offset, uint32_t dataSize, uint16_t* data) {
   pwrite(0x64, offset & 0xFFFF); /*write addr*/
   int j;
   for (int i = 0; i < dataSize; i++) {
-    pwrite(0x65, data[i]);
+    rst();
+    pwrite(0x65, (data[i * 2]) | (data[i * 2 + 1] << 8));
     pwrite(0x61, 0x4); /*begin*/
     j = 0;
     while (pread(0x61) != 0x4) {
@@ -402,15 +396,22 @@ void flashwrite(uint32_t offset, uint32_t dataSize, uint16_t* data) {
         gpio_put(PIN_SWITCH, false);
         pwrite(0x67, 0x0);
         Serial.println("fail");
+        Serial.print("0X61:0x");
+        Serial.println(pread(0x61), HEX);
+        Serial.println(i, HEX);
         return;
       }
       j++;
     }
-    while (pread(0x62) != 0x1F) {
+    uint16_t value;
+    while ((value = pread(0x62)) != 0x1F && value != 0x101F) {
       if (j > TIMEOUT) {
         gpio_put(PIN_SWITCH, false);
         pwrite(0x67, 0x0);
         Serial.println("fail");
+        Serial.print("0X62:0x");
+        Serial.println(pread(0x62), HEX);
+        Serial.println(i, HEX);
         return;
       }
       j++;
@@ -440,18 +441,23 @@ void flashfill(uint32_t offset, uint32_t dataSize, uint16_t data) {
       if (j > TIMEOUT) {
         gpio_put(PIN_SWITCH, false);
         pwrite(0x67, 0x0);
-
         Serial.println("fail");
+        Serial.print("0X61:0x");
+        Serial.println(pread(0x61), HEX);
+        Serial.println(i, HEX);
         return;
       }
       j++;
     }
-    while (pread(0x62) != 0x1F) {
+    uint16_t value;
+    while ((value = pread(0x62)) != 0x1F && value != 0x101F) {
       if (j > TIMEOUT) {
         gpio_put(PIN_SWITCH, false);
         pwrite(0x67, 0x0);
-
         Serial.println("fail");
+        Serial.print("0X62:0x");
+        Serial.println(pread(0x62), HEX);
+        Serial.println(i, HEX);
         return;
       }
       j++;
@@ -487,7 +493,6 @@ void flashwritemode(uint32_t offset) {
     if (Serial.available() > 0) {
       String commandSTR = Serial.readStringUntil('\n');
       for (char c : commandSTR) {
-
         if (c >= '0' && c <= '9') {
           hex[dataSize / 8] = hex[dataSize / 8] * 16 + (c - '0');
           dataSize += 4;
@@ -508,15 +513,22 @@ void flashwritemode(uint32_t offset) {
             gpio_put(PIN_SWITCH, false);
             pwrite(0x67, 0x0);
             Serial.println("fail");
+            Serial.print("0X61:0x");
+            Serial.println(pread(0x61), HEX);
+            Serial.println(i, HEX);
             return;
           }
           j++;
         }
-        while (pread(0x62) != 0x1F) {
+        uint16_t value;
+        while ((value = pread(0x62)) != 0x1F && value != 0x101F) {
           if (j > TIMEOUT) {
             gpio_put(PIN_SWITCH, false);
             pwrite(0x67, 0x0);
             Serial.println("fail");
+            Serial.print("0X62:0x");
+            Serial.println(pread(0x62), HEX);
+            Serial.println(i, HEX);
             return;
           }
           j++;
