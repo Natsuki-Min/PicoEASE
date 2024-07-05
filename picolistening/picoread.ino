@@ -3,6 +3,8 @@
 volatile PIO pio = pio0;
 volatile uint sm1, sm2;
 uint offset;
+// output_3.cpp
+
 static const uint16_t pioread_program_instructions[] = {
   //     .wrap_target
   0x8000,  //  0: push   noblock
@@ -69,14 +71,14 @@ static inline void read_program_init(PIO pio, uint sm, uint offset, uint pin_sda
   /*gpio_set_oeover(pin_sda, GPIO_OVERRIDE_INVERT);*/
   pio_gpio_init(pio, pin_scl);
   /*gpio_set_oeover(pin_scl, GPIO_OVERRIDE_INVERT);*/
-  gpio_pull_up(pin_scl);
-  gpio_pull_up(pin_sda);
+  /*gpio_pull_up(pin_scl);
+  gpio_pull_up(pin_sda);*/
   gpio_pull_up(pin_trig);
-  gpio_put(pin_sda, true);
-  gpio_put(pin_scl, true);
+  /*gpio_put(pin_sda, true);
+  gpio_put(pin_scl, true);*/
   uint32_t both_pins = (1u << pin_sda) | (1u << pin_scl) | (1u << pin_trig);
   pio_sm_set_pindirs_with_mask(pio, sm, (1u << pin_trig), both_pins);
-  pio_sm_set_pins_with_mask(pio, sm, both_pins, both_pins);
+  pio_sm_set_pins_with_mask(pio, sm, (1u << pin_trig), both_pins);
   pio_sm_init(pio, sm, offset, &c);
   pio_sm_clear_fifos(pio, sm);
   pio_sm_set_enabled(pio, sm, true);
@@ -102,26 +104,27 @@ static inline void trig_program_init(PIO pio, uint sm, uint offset, uint pin_sda
   /*gpio_set_oeover(pin_sda, GPIO_OVERRIDE_INVERT);*/
   pio_gpio_init(pio, pin_scl);
   /*gpio_set_oeover(pin_scl, GPIO_OVERRIDE_INVERT);*/
-  gpio_pull_up(pin_scl);
-  gpio_pull_up(pin_sda);
+  /*gpio_pull_up(pin_scl);
+  gpio_pull_up(pin_sda);*/
   gpio_pull_up(pin_trig);
-  gpio_put(pin_sda, true);
-  gpio_put(pin_scl, true);
+ /* gpio_put(pin_sda, true);
+  gpio_put(pin_scl, true);*/
   uint32_t both_pins = (1u << pin_sda) | (1u << pin_scl) | (1u << pin_trig);
   pio_sm_set_pindirs_with_mask(pio, sm, (1u << pin_trig), both_pins);
-  pio_sm_set_pins_with_mask(pio, sm, both_pins, both_pins);
+  pio_sm_set_pins_with_mask(pio, sm,(1u << pin_trig), both_pins);
   pio_sm_init(pio, sm, offset, &c);
   pio_sm_clear_fifos(pio, sm);
   pio_sm_set_enabled(pio, sm, true);
 }
-#define QUEUE_LENGTH 4096
-
+#define QUEUE_LENGTH 32768
+// 队列结构
 struct MyQueue {
   uint32_t data[QUEUE_LENGTH];
   int head;
   int tail;
 };
 
+// 创建队列
 volatile MyQueue queue = { {}, 0, 0 };
 
 void enqueue(volatile struct MyQueue *q, uint32_t value) {
