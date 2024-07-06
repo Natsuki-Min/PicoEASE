@@ -105,7 +105,10 @@ void loop() {
       } else if (pcommandType == 'Q') {
         flashwritemode(paddress);
       } /*else if (pcommandType == 'I') {
-        flashwrite(paddress, 0x10000/2, binary_data_3);
+        flashwrite(0x0, 0x10000/2, binary_data_0);
+        flashwrite(0x10000, 0x10000/2, binary_data_1);
+        flashwrite(0x20000, 0x10000/2, binary_data_2);
+        flashwrite(0x30000, 0x10000/2, binary_data_3);
       }*/
       Serial.println("Done");
     }
