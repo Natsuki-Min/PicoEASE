@@ -251,6 +251,15 @@ void parseString(const String& str) {
   pdata = hex[1];
   paddress = hex[0];
 }
+/*60 mode: 3read 1erase 5write
+611:read 5:erase 4 write
+62 r 1f or 101f
+63 seg
+64 addr
+65 datain
+66 output
+67 unlock
+*/
 void CSRRead(uint32_t addroffset, size_t dataSize) {
   uint16_t addr = addroffset & 0xFFFF, segment = addroffset >> 16;
   rst();
@@ -361,7 +370,6 @@ void flasheraseall() {
   int j;
   for (int i = 0; i < 16; i++) {
     block = i * 0x4000;
-    if (block != 0xFC00)｛
     pwrite(0x60, 0x1); /*enter erase mode*/
     pwrite(0x63, block >> 16);
     pwrite(0x64, block & 0xFFFF); /*write addr*/
@@ -373,7 +381,6 @@ void flasheraseall() {
     pwrite(0x60, 0x0);
     pwrite(0x61, 0x0);
     delay(50);
-    }
   }
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
@@ -382,6 +389,7 @@ void flasheraseall() {
   if (j >= TIMEOUT) {
     Serial.println("fail");
   }
+  flashfill(0xfc00,0x400,0xffff);
 }
 void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t* data) {
   rst();
