@@ -252,13 +252,13 @@ void CSRRead(uint32_t addroffset, size_t dataSize) {
   uint16_t addr = addroffset & 0xFFFF, segment = addroffset >> 16;
   rst();
   pwrite(0x60, 0x3);
-  pwrite(0x64, addr);
-  pwrite(0x63, segment);
   Serial.print(":02000002");
   Serial.print(intToHexString(segment, 1));
   Serial.print("000");
   Serial.println(intToHexString((uint8_t)(~(0x04 + ((uint8_t)(segment & 0xF) << 4)) + 1), 2));
   while (dataSize > (size_t)(0x10000 - addr)) {
+    pwrite(0x64, addr);
+    pwrite(0x63, segment);
     bin2hex(addroffset, 0x10000 - addr);
     dataSize -= (size_t)(0x10000 - addr);
     addroffset += (size_t)(0x10000 - addr);
@@ -269,6 +269,8 @@ void CSRRead(uint32_t addroffset, size_t dataSize) {
     Serial.print("000");
     Serial.println(intToHexString((uint8_t)(~(0x04 + ((uint8_t)(segment & 0xF) << 4)) + 1), 2));
   }
+  pwrite(0x64, addr);
+  pwrite(0x63, segment);
   bin2hex(addroffset, dataSize);
   Serial.println(":00000001FF");
 }
