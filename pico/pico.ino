@@ -358,6 +358,7 @@ void flasheraseall() {
   int j;
   for (int i = 0; i < 16; i++) {
     block = i * 0x4000;
+    if (block != 0xFC00)｛
     pwrite(0x60, 0x1); /*enter erase mode*/
     pwrite(0x63, block >> 16);
     pwrite(0x64, block & 0xFFFF); /*write addr*/
@@ -369,6 +370,7 @@ void flasheraseall() {
     pwrite(0x60, 0x0);
     pwrite(0x61, 0x0);
     delay(50);
+    }
   }
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
