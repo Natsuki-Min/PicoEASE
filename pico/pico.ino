@@ -396,7 +396,7 @@ void flasheraseall() {
   if (j >= TIMEOUT) {
     Serial.println("fail");
   }
-  flashfill(0xfc00, 0x200, 0xffff);
+  flashfill(0xfc00, 0x100, 0xffff);
 }
 void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t* data) {
   rst();
