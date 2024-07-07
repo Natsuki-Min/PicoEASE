@@ -348,7 +348,12 @@ void flasherase(uint32_t block) {
   j = 0;
   while ((pread(0x61) != 0x5) && (j < TIMEOUT)) { j++; }
   uint16_t value;
-  while (((value = pread(0x62)) != 0x1F && value != 0x101F) && (j < TIMEOUT)) { j++; }
+  while (((value = pread(0x62)) != 0x1F && value != 0x11F) && (j < TIMEOUT)) { j++; }
+  if (j >= TIMEOUT) {
+    Serial.print("0X62:0x");
+    Serial.println(pread(0x62), HEX);
+    Serial.println("fail");
+  }
   pwrite(0x60, 0x0);
   pwrite(0x61, 0x0);
   delay(50);
@@ -356,9 +361,6 @@ void flasherase(uint32_t block) {
     pwrite(0x67, 0x0); /*lock*/
   }
   gpio_put(PIN_SWITCH, false);
-  if (j >= TIMEOUT) {
-    Serial.println("fail");
-  }
 }
 void flasheraseall() {
   rst();
@@ -377,7 +379,12 @@ void flasheraseall() {
     j = 0;
     while ((pread(0x61) != 0x5) && (j < TIMEOUT)) { j++; }
     uint16_t value;
-    while (((value = pread(0x62)) != 0x1F && value != 0x101F) && (j < TIMEOUT)) { j++; }
+    while (((value = pread(0x62)) != 0x1F && value != 0x11F) && (j < TIMEOUT)) { j++; }
+    if (j >= TIMEOUT) {
+      Serial.print("0X62:0x");
+      Serial.println(pread(0x62), HEX);
+      Serial.println("fail");
+    }
     pwrite(0x60, 0x0);
     pwrite(0x61, 0x0);
     delay(50);
@@ -389,7 +396,7 @@ void flasheraseall() {
   if (j >= TIMEOUT) {
     Serial.println("fail");
   }
-  flashfill(0xfc00,0x400,0xffff);
+  flashfill(0xfc00, 0x200, 0xffff);
 }
 void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t* data) {
   rst();
