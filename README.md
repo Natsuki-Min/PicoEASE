@@ -38,7 +38,8 @@
   - Write 2bytes to the address
 - **'Q \<address\>'**
   - Enter flash writing mode. When in this mode, just type HEX (must be 2-byte alignment, must be below 1kb) and enter , e.g. `"ABCDEF1234567890\n"`, it will write to the flash and automatically increase the address. `"Q\n"` for exit.
-
+- **'S'**
+  - Initialize the Flash and Security ID,use it when you forget the password or you accidentally erased the password and exited debug without fill the password.
 ### picolistening
 - gpio2-sda
 - gpio3-sck
