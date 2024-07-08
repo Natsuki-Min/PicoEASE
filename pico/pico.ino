@@ -546,6 +546,7 @@ void InitializeFlash() {
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
+  flashfill(0xfc00,0x200,0xffff);
   gpio_put(PIN_SWITCH, false);
 }
 uint32_t RunCommand(uint32_t command) {
