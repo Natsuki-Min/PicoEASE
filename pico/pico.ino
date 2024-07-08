@@ -3,7 +3,7 @@
 #define PIN_SCL 3u
 #define PIN_SDA 2u
 #define PIN_SWITCH 4u
-#define TIMEOUT 50
+#define TIMEOUT 1000
 PIO pio = pio0;
 uint sm;
 char pcommandType;
@@ -73,43 +73,69 @@ void loop() {
     String commandSTR = Serial.readStringUntil('\n');
     if (commandSTR.length() > 0) {
       parseString(commandSTR);
-      if (pcommandType == 'W') {
-        pwrite(paddress, pdata);
-      } else if (pcommandType == 'R') {
-        uint16_t result = pread(paddress);
-        Serial.print("0x");
-        Serial.println(result, HEX);
-      } else if (pcommandType == 'T') {
-        pio->sm[0].clkdiv = paddress;
-      } else if (pcommandType == 'A') {
-        CSRRead(paddress, pdata);
-      } else if (pcommandType == 'E') {
-        flasherase(paddress);
-      } else if (pcommandType == 'B') {
-        beginset();
-      } else if (pcommandType == 'F') {
-        flashfill(paddress, pdata, 0xFFFF);
-      } else if (pcommandType == 'X') {
-        uint32_t result = RunCommand(paddress);
-        Serial.print("R0:0x");
-        Serial.println(result >> 16, HEX);
-        Serial.print("EA:0x");
-        Serial.println(result & 0xFFFF, HEX);
-      } else if (pcommandType == 'C') {
-        uint8_t arr[2];
-        arr[0] = pdata & 0xFF;
-        arr[1] = pdata >> 8;
-        flashwrite(paddress, 1, arr);
-      } else if (pcommandType == 'D') {
-        flasheraseall();
-      } else if (pcommandType == 'Q') {
-        flashwritemode(paddress);
-      } /*else if (pcommandType == 'I') {
-        flashwrite(0x0, 0x10000/2, binary_data_0);
-        flashwrite(0x10000, 0x10000/2, binary_data_1);
-        flashwrite(0x20000, 0x10000/2, binary_data_2);
-        flashwrite(0x30000, 0x10000/2, binary_data_3);
-      }*/
+      switch (pcommandType) {
+        case 'W':
+          pwrite(paddress, pdata);
+          break;
+        case 'R':
+          {
+            uint16_t result = pread(paddress);
+            Serial.print("0x");
+            Serial.println(result, HEX);
+            break;
+          }
+        case 'T':
+          pio->sm[0].clkdiv = paddress;
+          break;
+        case 'A':
+          CSRRead(paddress, pdata);
+          break;
+        case 'E':
+          flasherase(paddress);
+          break;
+        case 'B':
+          beginset();
+          break;
+        case 'F':
+          flashfill(paddress, pdata, 0xFFFF);
+          break;
+        case 'X':
+          {
+            uint32_t result = RunCommand(paddress);
+            Serial.print("R0:0x");
+            Serial.println(result >> 16, HEX);
+            Serial.print("EA:0x");
+            Serial.println(result & 0xFFFF, HEX);
+            break;
+          }
+        case 'C':
+          {
+            uint8_t arr[2];
+            arr[0] = pdata & 0xFF;
+            arr[1] = pdata >> 8;
+            flashwrite(paddress, 2, arr);
+            break;
+          }
+        case 'D':
+          flasheraseall();
+          break;
+        case 'Q':
+          flashwritemode(paddress);
+          break;
+        case 'S':
+          InitializeFlash();
+          break;
+        /* case 'I':
+    flashwrite(0x0, 0x10000, binary_data_0);
+    flashwrite(0x10000, 0x10000, binary_data_1);
+    flashwrite(0x20000, 0x10000, binary_data_2);
+    flashwrite(0x30000, 0x10000, binary_data_3);
+    break; */
+        default:
+          Serial.println("No Such Command");
+          break;
+      }
+
       Serial.println("Done");
     }
   }
@@ -172,6 +198,7 @@ void beginset(void) {
   Serial.println(pread(0x48), HEX);
   if (pread(0x48) != 0x0) {
     Serial.println("Trying default password");
+    delay(100);
     pwrite(0x4a, 0xFFFF);
     pwrite(0x4b, 0xFFFF);
     pwrite(0x4c, 0xFFFF);
@@ -252,7 +279,7 @@ void parseString(const String& str) {
   paddress = hex[0];
 }
 /*60 mode: 3read 1erase 5write
-611:read 5:erase 4 write
+611:read 5:erase 4 write 6:eraseall
 62 r 1f or 101f
 63 seg
 64 addr
@@ -348,7 +375,7 @@ void flasherase(uint32_t block) {
   j = 0;
   while ((pread(0x61) != 0x5) && (j < TIMEOUT)) { j++; }
   uint16_t value;
-  while (((value = pread(0x62)) != 0x1F && value != 0x11F) && (j < TIMEOUT)) { j++; }
+  while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) { j++; }
   if (j >= TIMEOUT) {
     Serial.print("0X62:0x");
     Serial.println(pread(0x62), HEX);
@@ -379,7 +406,7 @@ void flasheraseall() {
     j = 0;
     while ((pread(0x61) != 0x5) && (j < TIMEOUT)) { j++; }
     uint16_t value;
-    while (((value = pread(0x62)) != 0x1F && value != 0x11F) && (j < TIMEOUT)) { j++; }
+    while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) { j++; }
     if (j >= TIMEOUT) {
       Serial.print("0X62:0x");
       Serial.println(pread(0x62), HEX);
@@ -396,9 +423,10 @@ void flasheraseall() {
   if (j >= TIMEOUT) {
     Serial.println("fail");
   }
-  flashfill(0xfc00, 0x100, 0xffff);
+  flashfill(0xfc00, 0x200, 0xffff);
 }
 void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t* data) {
+  dataSize /= 2;
   rst();
   if (pread(0x67) == 0x0) {
     pwrite(0x67, 0x1); /*unlock*/
@@ -446,6 +474,7 @@ void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t* data) {
   gpio_put(PIN_SWITCH, false);
 }
 void flashfill(uint32_t offset, uint32_t dataSize, uint16_t data) {
+  dataSize /= 2;
   rst();
   if (pread(0x67) == 0x0) {
     pwrite(0x67, 0x1); /*unlock*/
@@ -486,6 +515,34 @@ void flashfill(uint32_t offset, uint32_t dataSize, uint16_t data) {
     }
     delayMicroseconds(30);
   }
+  if (pread(0x67) == 0x1) {
+    pwrite(0x67, 0x0); /*lock*/
+  }
+  gpio_put(PIN_SWITCH, false);
+}
+void InitializeFlash() {
+  rst();
+  if (pread(0x67) == 0x0) {
+    pwrite(0x67, 0x1); /*unlock*/
+  }
+  gpio_put(PIN_SWITCH, true);
+  pwrite(0x60, 0x1); /*enter erase mode*/
+  pwrite(0x63, 0x0);
+  pwrite(0x64, 0x0); /*write addr*/
+  pwrite(0x61, 0x6); /*begin*/
+  int j;
+  j = 0;
+  while ((pread(0x61) != 0x6) && (j < TIMEOUT)) { j++; }
+  uint16_t value;
+  while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) { j++; }
+  if (j >= TIMEOUT) {
+    Serial.print("0X62:0x");
+    Serial.println(pread(0x62), HEX);
+    Serial.println("fail");
+  }
+  pwrite(0x60, 0x0);
+  pwrite(0x61, 0x0);
+  delay(50);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
