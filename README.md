@@ -5,10 +5,10 @@
 **An NXU16 Debugger**
 
 ### pico Pinout:
-- gpio2-p152 (sda)
-- gpio3-p151 (sck)
-- vcc-p154 (3v3)
-- gnd-p172 (gnd)
+- gpio2-sda
+- gpio3-sck
+- vcc-3v3
+- gnd-gnd
 - gpio4-vppctrl
 
 ### Usage:
@@ -37,12 +37,12 @@
 - **'C \<address\> \<data\>'**
   - Write 2bytes to the address
 - **'Q \<address\>'**
-  - Enter flash writing mode. When in this mode, just type HEX (must be 2-byte alignment, must be below 1kb) and enter like `"ABCDEF1234567890\n"`, it will write to the flash and automatically increase the address. `"Q\n"` for exit.
+  - Enter flash writing mode. When in this mode, just type HEX (must be 2-byte alignment, must be below 1kb) and enter , e.g. `"ABCDEF1234567890\n"`, it will write to the flash and automatically increase the address. `"Q\n"` for exit.
 
 ### picolistening
-- gpio2-p152 (sda)
-- gpio3-p151 (sck)
-- gnd-p172 (gnd)
+- gpio2-sda
+- gpio3-sck
+- gnd-gnd
 - gpio4-open (must)
 
 This is for listening to the communication from the uease. Use `parase.py` to convert the contents from the Serial to readable format.Due to my low programming skills，the speed of the pio must be 24 times faster than uEASE ,so run it under 250Mhz,instead of 133Mhz default
