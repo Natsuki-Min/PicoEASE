@@ -10,26 +10,28 @@ char pcommandType;
 uint32_t paddress;
 uint32_t pdata;
 uint offset;
+volatile bool isfastmode = false;
+volatile void (*core1fun)() = nullptr;
 static const uint16_t pgm[32] = {
   /*     .wrap_target*/
-  0x80a0, /*  0: pull   block*/
-  0xe027, /*  1: set    x, 7*/
-  0x7001, /*  2: out    pins, 1         side 0*/
-  0x1842, /*  3: jmp    x--, 2          side 1*/
-  0x00c9, /*  4: jmp    pin, 9*/
-  0xe02f, /*  5: set    x, 15*/
-  0x7001, /*  6: out    pins, 1         side 0*/
-  0x1846, /*  7: jmp    x--, 6          side 1*/
-  0x0000, /*  8: jmp    0*/
-  0xf880, /*  9: set    pindirs, 0      side 1*/
-  0xf02e, /* 10: set    x, 14           side 0*/
-  0x5801, /* 11: in     pins, 1         side 1*/
-  0x104b, /* 12: jmp    x--, 11         side 0*/
-  0x5801, /* 13: in     pins, 1         side 1*/
-  0x8000, /* 14: push   noblock*/
-  0xe081, /* 15: set    pindirs, 1*/
-  0x0000, /* 16: jmp    0*/
-          /*     .wrap*/
+  0x80a0,  /*  0: pull   block*/
+  0xe027,  /*  1: set    x, 7*/
+  0x7001,  /*  2: out    pins, 1         side 0*/
+  0x1842,  /*  3: jmp    x--, 2          side 1*/
+  0x00c9,  /*  4: jmp    pin, 9*/
+  0xe02f,  /*  5: set    x, 15*/
+  0x7001,  /*  6: out    pins, 1         side 0*/
+  0x1846,  /*  7: jmp    x--, 6          side 1*/
+  0x0000,  /*  8: jmp    0*/
+  0xf880,  /*  9: set    pindirs, 0      side 1*/
+  0xf02e,  /* 10: set    x, 14           side 0*/
+  0x5801,  /* 11: in     pins, 1         side 1*/
+  0x104b,  /* 12: jmp    x--, 11         side 0*/
+  0x5801,  /* 13: in     pins, 1         side 1*/
+  0x8020,  // 14: push   block
+  0xe081,  /* 15: set    pindirs, 1*/
+  0x0000,  /* 16: jmp    0*/
+           /*     .wrap*/
   0x0000,
   0x0000,
   0x0000,
@@ -51,13 +53,13 @@ static const struct pio_program piopgm = {
   .length = 32,
   .origin = -1
 };
-void pwrite(uint8_t addr, uint16_t data) {
+void inline pwrite(uint8_t addr, uint16_t data) {
   //Serial.println(data,HEX);
   uint32_t rdata;
   rdata = (addr << 17) | (0x0 << 16) | data;
   pio_sm_put_blocking(pio, sm, rdata << 8);
 }
-uint16_t pread(uint8_t addr) {
+uint16_t inline pread(uint8_t addr) {
   uint32_t rdata;
   rdata = (addr << 1) | 0x1;
   pio_sm_put_blocking(pio, sm, rdata << 24);
@@ -125,6 +127,9 @@ void loop() {
         case 'S':
           InitializeFlash();
           break;
+        case 'G':
+          fastROMRead(paddress, pdata);
+          break;
         /* case 'I':
     flashwrite(0x0, 0x10000, binary_data_0);
     flashwrite(0x10000, 0x10000, binary_data_1);
@@ -143,10 +148,11 @@ void loop() {
 void waitack(void) {
   while (pread(0x0c) != 0x00) { Serial.println("ack"); }
 }
-void rst(void) {
+bool rst(void) {
   gpio_put(PIN_SDA, false);
   delayMicroseconds(1);
   gpio_put(PIN_SDA, true);
+  return (pread(0x0) == 0x480);
 }
 void beginset(void) {
   gpio_put(PIN_SCL, true);
@@ -249,7 +255,7 @@ static inline void i2c_program_init(PIO pio, uint sm, uint offset, uint pin_sda,
   pio_sm_init(pio, sm, offset, &c);
   pio_sm_set_enabled(pio, sm, true);
 }
-void parseString(const String& str) {
+void parseString(const String &str) {
   char type;
   int hex[2] = { 0 };
   bool readingType = true;
@@ -375,7 +381,10 @@ void flasherase(uint32_t block) {
   j = 0;
   while ((pread(0x61) != 0x5) && (j < TIMEOUT)) { j++; }
   uint16_t value;
-  while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) { j++; }
+  while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) {
+    j++;
+    delay(1);
+  }
   if (j >= TIMEOUT) {
     Serial.print("0X62:0x");
     Serial.println(pread(0x62), HEX);
@@ -406,7 +415,10 @@ void flasheraseall() {
     j = 0;
     while ((pread(0x61) != 0x5) && (j < TIMEOUT)) { j++; }
     uint16_t value;
-    while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) { j++; }
+    while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) {
+      j++;
+      delay(1);
+    }
     if (j >= TIMEOUT) {
       Serial.print("0X62:0x");
       Serial.println(pread(0x62), HEX);
@@ -425,7 +437,7 @@ void flasheraseall() {
   }
   flashfill(0xfc00, 0x200, 0xffff);
 }
-void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t* data) {
+void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t *data) {
   dataSize /= 2;
   rst();
   if (pread(0x67) == 0x0) {
@@ -465,6 +477,7 @@ void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t* data) {
         return;
       }
       j++;
+      delay(1);
     }
     delayMicroseconds(30);
   }
@@ -512,6 +525,7 @@ void flashfill(uint32_t offset, uint32_t dataSize, uint16_t data) {
         return;
       }
       j++;
+      delay(1);
     }
     delayMicroseconds(30);
   }
@@ -534,7 +548,10 @@ void InitializeFlash() {
   j = 0;
   while ((pread(0x61) != 0x6) && (j < TIMEOUT)) { j++; }
   uint16_t value;
-  while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) { j++; }
+  while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) {
+    j++;
+    delay(1);
+  }
   if (j >= TIMEOUT) {
     Serial.print("0X62:0x");
     Serial.println(pread(0x62), HEX);
@@ -546,7 +563,7 @@ void InitializeFlash() {
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  flashfill(0xfc00,0x200,0xffff);
+  flashfill(0xfc00, 0x200, 0xffff);
   gpio_put(PIN_SWITCH, false);
 }
 uint32_t RunCommand(uint32_t command) {
@@ -612,6 +629,7 @@ void flashwritemode(uint32_t offset) {
             return;
           }
           j++;
+          delay(1);
         }
         delayMicroseconds(30);
       }
@@ -622,4 +640,97 @@ void flashwritemode(uint32_t offset) {
     pwrite(0x67, 0x0); /*lock*/
   }
   gpio_put(PIN_SWITCH, false);
+}
+#define QUEUE_LENGTH 65536
+
+struct MyQueue {
+  uint16_t data[QUEUE_LENGTH];
+  int head;
+  int tail;
+};
+
+volatile MyQueue queue = { {}, 0, 0 };
+
+void enqueue(volatile struct MyQueue *q, uint16_t value) {
+  int nextTail = (q->tail + 1) % QUEUE_LENGTH;
+  if (nextTail != q->head) {
+    q->data[q->tail] = value;
+    q->tail = nextTail;
+  } else {
+    Serial.println("Queue full, data lost");
+  }
+}
+
+bool dequeue(volatile struct MyQueue *q, uint16_t *value) {
+  if (q->head != q->tail) {
+    *value = q->data[q->head];
+    q->head = (q->head + 1) % QUEUE_LENGTH;
+    return true;
+  } else {
+    return false;
+  }
+}
+void loop1() {
+  while (isfastmode) {
+    core1fun();
+  }
+}
+
+void inline binreadfast(uint32_t addroffset, size_t dataSize) {
+  for (size_t j = 0; j < dataSize; j = j + 2) {
+    while ((pio->fstat & (1u << (PIO_FSTAT_TXFULL_LSB + sm))) != 0) { tight_loop_contents(); }
+    pio->txf[sm] = (((0x61 << 17) | (0x0 << 16) | 0x1) << 8);
+    while ((pio->fstat & (1u << (PIO_FSTAT_TXFULL_LSB + sm))) != 0) { tight_loop_contents(); }
+    pio->txf[sm] = ((0x66 << 1) | 0x1) << 24;
+    if ((pio->fstat & (1u << (PIO_FSTAT_RXEMPTY_LSB + sm))) == 0) {
+      enqueue(&queue, pio->rxf[sm]);
+    } else {
+      if (queue.head != queue.tail) {
+        uint32_t data_to_send = queue.data[queue.head];
+        if (rp2040.fifo.push_nb(data_to_send)) {
+          queue.head = (queue.head + 1) % QUEUE_LENGTH;
+        } else {
+          continue;
+        }
+      } else {
+        continue;
+      }
+    }
+  }
+
+  while (((pio->fstat & (1u << (PIO_FSTAT_RXEMPTY_LSB + sm))) == 0)) { enqueue(&queue, pio->rxf[sm]); }
+  while (pio_sm_get_tx_fifo_level(pio, sm) != 0) { tight_loop_contents(); }
+  while (((pio->fstat & (1u << (PIO_FSTAT_RXEMPTY_LSB + sm))) == 0)) { enqueue(&queue, pio->rxf[sm]); }
+  while (queue.head != queue.tail) {
+    uint32_t data_to_send = queue.data[queue.head];
+    if (rp2040.fifo.push_nb(data_to_send)) {
+      queue.head = (queue.head + 1) % QUEUE_LENGTH;
+    } else {
+      continue;
+    }
+  }
+}
+void fastROMRead(uint32_t addroffset, size_t dataSize) {
+  core1fun = &fastROMReadCore1;
+  isfastmode = true;
+  uint16_t addr = addroffset & 0xFFFF, segment = addroffset >> 16;
+  rst();
+  pwrite(0x60, 0x3);
+  while (dataSize > (size_t)(0x10000 - addr)) {
+    pwrite(0x64, addr);
+    pwrite(0x63, segment);
+    binreadfast(addroffset, 0x10000 - addr);
+    dataSize -= (size_t)(0x10000 - addr);
+    addroffset += (size_t)(0x10000 - addr);
+    segment = addroffset >> 16;
+    addr = addroffset & 0xFFFF;
+  }
+  pwrite(0x64, addr);
+  pwrite(0x63, segment);
+  binreadfast(addroffset, dataSize);
+}
+volatile void fastROMReadCore1() {
+  uint16_t rd = rp2040.fifo.pop();
+  Serial.write(rd & 0xFF);
+  Serial.write(rd >> 8);
 }
