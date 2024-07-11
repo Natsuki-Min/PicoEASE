@@ -1,4 +1,3 @@
-This repository is forked from natsuki_min's picoEASE, with added rp2EASE.ino for rp2Ease software.
 ---
 
 ## PicoEASE
