@@ -1,5 +1,7 @@
 Forked from **picoEase**
-picoEase - minimize
+
+picoEase-minimize
+
 ---
 
 ## PicoEASE
