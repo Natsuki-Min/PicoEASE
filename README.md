@@ -11,7 +11,7 @@
 - gpio4-vppctrl
 
 ### Usage:
-***Claim:*** All the parameters are in HEX format and without '0x'
+***Claim:*** All the parameters are in HEX format and without '0x' except \<filename\>
 - **'B'**
   - Connect to the chip
 - **'W \<address\> \<data\>'**
@@ -27,7 +27,9 @@
   - Read Flash from the given address for the specified bytes (2 bytes alignment) in Intel HEX format.
 - **'G \<address\> \<length\>'**
   - Read Flash from the given address for the specified bytes (2 bytes alignment) in Bin format(Faster).
-
+- **'H \<address\> \<length\> \<filename\>'**
+  - Read Flash from the given address for the specified bytes (2 bytes alignment) and save it.Caution:Windows user should unplug and plug the pico to refreash the filelist
+  
 ***Caution!*** The following commands need VPP supply! Due to the auto increase address, the length can't be larger than one segment, otherwise it will loop back. Also include 'Q' command e.g. 1FFFF+1 -> 10000.
 - **'E \<address\>'**
   - Erase one block where the address is. One block is the size of 0x4000 in cw1.
@@ -41,8 +43,8 @@
   - Enter flash writing mode. When in this mode, just type HEX (must be 2-byte alignment, must be below 1kb) and enter , e.g. `"ABCDEF1234567890\n"`, it will write to the flash and automatically increase the address. `"Q\n"` for exit.
 - **'S'**
   - Initialize the Flash and Security ID,use it when you forget the password or you accidentally erased the password and exited debug without fill the password.
-- **'I'**
-  - Alternative command,it can flash the whole flash with the array inside the firmware.Use `bin2arr.py` to generate the array
+- **'I \<address\> \<filename\>'**
+  - Flash the flash with the file from the given address.
   
 ### picolistening
 - gpio2-sda
