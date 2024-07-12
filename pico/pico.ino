@@ -1,5 +1,13 @@
 #include "hardware/pio.h"
 #include <pico.h>
+#include "SPI.h"
+#include "SdFat.h"
+#include "Adafruit_SPIFlash.h"
+#include "Adafruit_TinyUSB.h"
+
+// for flashTransport definition
+#include "flash_config.h"
+
 #define PIN_SCL 3u
 #define PIN_SDA 2u
 #define PIN_SWITCH 4u
@@ -12,6 +20,14 @@ uint32_t pdata;
 uint offset;
 volatile bool isfastmode = false;
 volatile void (*core1fun)() = nullptr;
+
+// file system object from SdFat
+FatVolume fatfs;
+FatFile file;
+
+Adafruit_SPIFlash flash(&flashTransport);
+Adafruit_USBD_MSC usb_msc;
+
 static const uint16_t pgm[32] = {
   /*     .wrap_target*/
   0x80a0,  /*  0: pull   block*/
@@ -67,6 +83,29 @@ uint16_t inline pread(uint8_t addr) {
 }
 void setup() {
   Serial.begin(9600);
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  flash.begin();
+
+  // Set disk vendor id, product id and revision with string up to 8, 16, 4 characters respectively
+  usb_msc.setID("Adafruit", "External Flash", "1.0");
+
+  // Set callback
+  usb_msc.setReadWriteCallback(msc_read_cb, msc_write_cb, msc_flush_cb);
+
+  // Set disk size, block size should be 512 regardless of spi flash page size
+  usb_msc.setCapacity(flash.size() / 512, 512);
+
+  // MSC is ready for read/write
+  usb_msc.setUnitReady(true);
+
+  usb_msc.begin();
+
+  // Init file system on the flash
+
+  if (!fatfs.begin(&flash)) {
+    Serial.println("Please format your pico first");
+  }
   gpio_put(PIN_SWITCH, false);
   pio_init();
 }
@@ -130,12 +169,24 @@ void loop() {
         case 'G':
           fastROMRead(paddress, pdata);
           break;
-        /* case 'I':
-    flashwrite(0x0, 0x10000, binary_data_0);
-    flashwrite(0x10000, 0x10000, binary_data_1);
-    flashwrite(0x20000, 0x10000, binary_data_2);
-    flashwrite(0x30000, 0x10000, binary_data_3);
-    break; */
+        case 'I':
+          {
+            commandSTR.trim();  // Removes leading and trailing whitespaces, including '\n'
+            int spaceIndex = commandSTR.lastIndexOf(' ');
+            String extractedString = commandSTR.substring(spaceIndex + 1);
+            //Serial.println(extractedString); //I don't know why,but when you use -o3 must use it
+            flashwritefromFlash(paddress, extractedString.c_str());
+            break;
+          }
+        case 'H':
+          {
+            commandSTR.trim();  // Removes leading and trailing whitespaces, including '\n'
+            int spaceIndex = commandSTR.lastIndexOf(' ');
+            String extractedString = commandSTR.substring(spaceIndex + 1);
+            //Serial.println(extractedString);  //I don't know why,but when you use -o3 must use it
+            ROMSave(paddress, pdata, extractedString.c_str());
+            break;
+          }
         default:
           Serial.println("No Such Command");
           break;
@@ -265,8 +316,10 @@ void parseString(const String &str) {
       if (readingType) {
         readingType = false;
         readingHex = 0;
-      } else {
+      } else if (readingHex < 2) {
         readingHex = readingHex + 1;
+      } else {
+        break;
       }
     } else {
       if (readingType) {
@@ -485,6 +538,69 @@ void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t *data) {
     pwrite(0x67, 0x0); /*lock*/
   }
   gpio_put(PIN_SWITCH, false);
+}
+void flashwritefromFlash(uint32_t offset, const char *filePath) {
+  file.open(filePath);
+  if (!file) {
+    Serial.println("Cannot open file");
+    return;
+  }
+
+  rst();
+  if (pread(0x67) == 0x0) {
+    pwrite(0x67, 0x1); /*unlock*/
+  }
+  gpio_put(PIN_SWITCH, true);
+  pwrite(0x60, 0x5); /*enter write mode*/
+  pwrite(0x63, offset >> 16);
+  pwrite(0x64, offset & 0xFFFF); /*write addr*/
+  int lastseg = offset >> 16, j;
+  while (file.available()) {
+    rst();
+    uint8_t data[2];
+    data[0] = file.read();
+    data[1] = file.read();
+    pwrite(0x65, (data[0]) | (data[1] << 8));
+    pwrite(0x61, 0x4); /*begin*/
+    j = 0;
+    while (pread(0x61) != 0x4) {
+      if (j > TIMEOUT) {
+        gpio_put(PIN_SWITCH, false);
+        pwrite(0x67, 0x0);
+        Serial.println("fail");
+        Serial.print("0X61:0x");
+        Serial.println(pread(0x61), HEX);
+        Serial.println(offset, HEX);
+        return;
+      }
+      j++;
+    }
+    uint16_t value;
+    while ((value = pread(0x62)) != 0x1F && value != 0x101F) {
+      if (j > TIMEOUT) {
+        gpio_put(PIN_SWITCH, false);
+        pwrite(0x67, 0x0);
+        Serial.println("fail");
+        Serial.print("0X62:0x");
+        Serial.println(pread(0x62), HEX);
+        Serial.println(offset, HEX);
+        return;
+      }
+      j++;
+      delay(1);
+    }
+    delayMicroseconds(30);
+    offset += 2;
+    if ((offset >> 16) != lastseg) {
+      pwrite(0x63, offset >> 16);
+      pwrite(0x64, offset & 0xFFFF); /*write addr*/
+    }
+  }
+  if (pread(0x67) == 0x1) {
+    pwrite(0x67, 0x0); /*lock*/
+  }
+  gpio_put(PIN_SWITCH, false);
+  file.close();
 }
 void flashfill(uint32_t offset, uint32_t dataSize, uint16_t data) {
   dataSize /= 2;
@@ -733,4 +849,68 @@ volatile void fastROMReadCore1() {
   uint16_t rd = rp2040.fifo.pop();
   Serial.write(rd & 0xFF);
   Serial.write(rd >> 8);
+}
+void ROMSave(uint32_t addroffset, size_t dataSize, const char *filePath) {
+  if (!file.open(filePath, O_WRITE | O_CREAT)) {
+    Serial.println("File open failed.");
+    return;
+  }
+  uint16_t addr = addroffset & 0xFFFF, segment = addroffset >> 16;
+  rst();
+  pwrite(0x60, 0x3);
+  while (dataSize > (size_t)(0x10000 - addr)) {
+    pwrite(0x64, addr);
+    pwrite(0x63, segment);
+    for (size_t j = 0; j < 0x10000 - addr; j = j + 2) {
+      pwrite(0x61, 0x1);
+      uint16_t rd = pread(0x66);
+      file.write(rd & 0xFF);
+      file.write(rd >> 8);
+    }
+    dataSize -= (size_t)(0x10000 - addr);
+    addroffset += (size_t)(0x10000 - addr);
+    segment = addroffset >> 16;
+    addr = addroffset & 0xFFFF;
+  }
+  pwrite(0x64, addr);
+  pwrite(0x63, segment);
+  for (size_t j = 0; j < dataSize; j = j + 2) {
+    pwrite(0x61, 0x1);
+    uint16_t rd = pread(0x66);
+    file.write(rd & 0xFF);
+    file.write(rd >> 8);
+  }
+  file.close();
+}
+
+// Callback invoked when received READ10 command.
+// Copy disk's data to buffer (up to bufsize) and
+// return number of copied bytes (must be multiple of block size)
+int32_t msc_read_cb(uint32_t lba, void *buffer, uint32_t bufsize) {
+  // Note: SPIFLash Block API: readBlocks/writeBlocks/syncBlocks
+  // already include 4K sector caching internally. We don't need to cache it, yahhhh!!
+  return flash.readBlocks(lba, (uint8_t *)buffer, bufsize / 512) ? bufsize : -1;
+}
+
+// Callback invoked when received WRITE10 command.
+// Process data in buffer to disk's storage and
+// return number of written bytes (must be multiple of block size)
+int32_t msc_write_cb(uint32_t lba, uint8_t *buffer, uint32_t bufsize) {
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  // Note: SPIFLash Block API: readBlocks/writeBlocks/syncBlocks
+  // already include 4K sector caching internally. We don't need to cache it, yahhhh!!
+  return flash.writeBlocks(lba, buffer, bufsize / 512) ? bufsize : -1;
+}
+
+// Callback invoked when WRITE10 command is completed (status received and accepted by host).
+// used to flush any pending cache.
+void msc_flush_cb(void) {
+  // sync with flash
+  flash.syncBlocks();
+
+  // clear file system's cache to force refresh
+  fatfs.cacheClear();
+
+  digitalWrite(LED_BUILTIN, LOW);
 }
