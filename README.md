@@ -45,6 +45,8 @@
   - Initialize the Flash and Security ID,use it when you forget the password or you accidentally erased the password and exited debug without fill the password.
 - **'I \<address\> \<filename\>'**
   - Flash the flash with the file from the given address.
+
+## **Must choose Flahsize:1MB FS and usb Stack: Adafruit tinyusb to compile**
   
 ### picolistening
 - gpio2-sda
