@@ -68,9 +68,6 @@ uint16_t pread(uint8_t addr) {
 }
 void setup() {
   Serial.begin(115200);
-  while(!Serial){
-    ;//delay(1);
-  }
   gpio_put(PIN_SWITCH, false);
   pio_init();
 }
@@ -99,18 +96,6 @@ void loop() {
             }
           }
         }
-        // REPEAT 3 I
-        //     R 67=0001
-        //     W 67<0000
-        //     W 60<0000 61<0000
-        //     R 00=0480 67=0000
-        //     W 67<0001 60<0005 63<I 64<0000 
-        //     REPEAT FFFF
-        //         W 65<((*(file+1) << 8) | *file) 61<0004
-        //         R 61=0004 62=001f
-        //         file+=2
-        //     END
-        // END
         Serial.write(0xAC);
       }
     if (commandSTR.length() == 5) {
@@ -139,7 +124,7 @@ void loop() {
     else if (commandSTR.length() == 1) {
       parseString(commandSTR);
       if (pcommandType == 'V') {
-        Serial.println("0.02");
+        Serial.println("0.03");
       } else if(pcommandType == 'B') {
           gpio_put(PIN_SCL, true);
           gpio_put(PIN_SDA, false);
