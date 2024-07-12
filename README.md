@@ -51,7 +51,7 @@
 - gpio4-open (must)
 
 This is for listening to the communication from the uease. Use `prase.py` to convert the contents from the Serial to readable format.Due to my low programming skills，the speed of the pio must be 24 times faster than uEASE ,so run it under 250Mhz,instead of 133Mhz default
-### rptoEase
+### rp2Ease
 
 This is a branch for rp2Ease upper-Computer，which has a cool graphical user interface and can one-click flash
 ### **ALL MUST COMPILE IN ARDUINO PICO INSTEAD OF MBED OS**
