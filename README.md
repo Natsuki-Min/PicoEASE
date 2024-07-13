@@ -47,7 +47,7 @@
   - Flash the flash with the file from the given address.
 ***Use BootSel Botton***
 - You can create a file named `commands.txt` under the root directory and when you press the bootsel botton pico will run commands in the file
-  -e.g. "B\nB\nH 0 40000 rom.bin" to dump ROM,"B\nB\nI 0 rom.bin" to flash ROM
+  -e.g. "B\nB\nH 0 40000 rom.bin" to dump ROM,"B\nB\nS\nI 0 rom.bin" to flash ROM
 
 ## **Must choose Flahsize:1MB FS and usb Stack: Adafruit tinyusb and -O2(this made me confused) to compile**
   
