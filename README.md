@@ -45,6 +45,7 @@
   - Initialize the Flash and Security ID,use it when you forget the password or you accidentally erased the password and exited debug without fill the password.
 - **'I \<address\> \<filename\>'**
   - Flash the flash with the file from the given address.
+
 ***Use BootSel Botton***
 - You can create a file named `commands.txt` under the root directory and when you press the bootsel botton pico will run commands in the file
   -e.g. "B\nB\nH 0 40000 rom.bin" to dump ROM,"B\nB\nS\nI 0 rom.bin" to flash ROM
