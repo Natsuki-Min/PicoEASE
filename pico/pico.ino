@@ -4,7 +4,7 @@
 #include "SdFat.h"
 #include "Adafruit_SPIFlash.h"
 #include "Adafruit_TinyUSB.h"
-
+#include "BufferedPrint.h"
 // for flashTransport definition
 #include "flash_config.h"
 
@@ -20,11 +20,11 @@ uint32_t pdata;
 uint offset;
 volatile bool isfastmode = false;
 volatile void (*core1fun)() = nullptr;
-
+typedef FatFile file_t;
 // file system object from SdFat
 FatVolume fatfs;
-FatFile file;
-
+file_t file;
+BufferedPrint<file_t,64> bp;
 Adafruit_SPIFlash flash(&flashTransport);
 Adafruit_USBD_MSC usb_msc;
 
@@ -84,25 +84,17 @@ uint16_t inline pread(uint8_t addr) {
 void setup() {
   Serial.begin(9600);
   pinMode(LED_BUILTIN, OUTPUT);
-
   flash.begin();
-
   // Set disk vendor id, product id and revision with string up to 8, 16, 4 characters respectively
   usb_msc.setID("Adafruit", "External Flash", "1.0");
-
   // Set callback
   usb_msc.setReadWriteCallback(msc_read_cb, msc_write_cb, msc_flush_cb);
-
   // Set disk size, block size should be 512 regardless of spi flash page size
   usb_msc.setCapacity(flash.size() / 512, 512);
-
   // MSC is ready for read/write
   usb_msc.setUnitReady(true);
-
   usb_msc.begin();
-
   // Init file system on the flash
-
   if (!fatfs.begin(&flash)) {
     Serial.println("Please format your pico first");
   }
@@ -110,90 +102,39 @@ void setup() {
   pio_init();
 }
 void loop() {
+
+  if (BOOTSEL) {
+    file_t file2;
+    while (BOOTSEL) { tight_loop_contents(); }
+    file2.open("/commands.txt");
+    if (!file2) {
+      Serial.println("Cannot open file");
+      file2.close();
+      return;
+    }
+    char line[100];
+    digitalWrite(LED_BUILTIN, HIGH);
+    while (file2.available()) {
+      int n = file2.fgets(line, sizeof(line));
+      if (n <= 0) {
+        Serial.println("fgets failed");
+        break;
+      }
+      if (line[n - 1] != '\n' && n == (sizeof(line) - 1)) {
+        Serial.println("line too long,or you are using a Mac?LOL");
+        break;
+      }
+      String str=line;
+      str.trim();
+      praseline(str);
+    }
+    digitalWrite(LED_BUILTIN, LOW);
+    file2.close();
+  }
   if (Serial.available() > 0) {
     String commandSTR = Serial.readStringUntil('\n');
-    if (commandSTR.length() > 0) {
-      parseString(commandSTR);
-      switch (pcommandType) {
-        case 'W':
-          pwrite(paddress, pdata);
-          break;
-        case 'R':
-          {
-            uint16_t result = pread(paddress);
-            Serial.print("0x");
-            Serial.println(result, HEX);
-            break;
-          }
-        case 'T':
-          pio->sm[0].clkdiv = paddress;
-          break;
-        case 'A':
-          CSRRead(paddress, pdata);
-          break;
-        case 'E':
-          flasherase(paddress);
-          break;
-        case 'B':
-          beginset();
-          break;
-        case 'F':
-          flashfill(paddress, pdata, 0xFFFF);
-          break;
-        case 'X':
-          {
-            uint32_t result = RunCommand(paddress);
-            Serial.print("R0:0x");
-            Serial.println(result >> 16, HEX);
-            Serial.print("EA:0x");
-            Serial.println(result & 0xFFFF, HEX);
-            break;
-          }
-        case 'C':
-          {
-            uint8_t arr[2];
-            arr[0] = pdata & 0xFF;
-            arr[1] = pdata >> 8;
-            flashwrite(paddress, 2, arr);
-            break;
-          }
-        case 'D':
-          flasheraseall();
-          break;
-        case 'Q':
-          flashwritemode(paddress);
-          break;
-        case 'S':
-          InitializeFlash();
-          break;
-        case 'G':
-          fastROMRead(paddress, pdata);
-          break;
-        case 'I':
-          {
-            commandSTR.trim();  // Removes leading and trailing whitespaces, including '\n'
-            int spaceIndex = commandSTR.lastIndexOf(' ');
-            String extractedString = commandSTR.substring(spaceIndex + 1);
-            //Serial.println(extractedString); //I don't know why,but when you use -o3 must use it
-            flashwritefromFlash(paddress, extractedString.c_str());
-            break;
-          }
-        case 'H':
-          {
-            commandSTR.trim();  // Removes leading and trailing whitespaces, including '\n'
-            int spaceIndex = commandSTR.lastIndexOf(' ');
-            String extractedString = commandSTR.substring(spaceIndex + 1);
-            //Serial.println(extractedString);  //I don't know why,but when you use -o3 must use it
-            ROMSave(paddress, pdata, extractedString.c_str());
-            break;
-          }
-        default:
-          Serial.println("No Such Command");
-          break;
-      }
-
-      Serial.println("Done");
-    }
+    praseline(commandSTR);
+    Serial.println("Done");
   }
 }
 void waitack(void) {
@@ -542,6 +483,7 @@ void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t *data) {
 void flashwritefromFlash(uint32_t offset, const char *filePath) {
   file.open(filePath);
   if (!file) {
+    Serial.println(filePath);
     Serial.println("Cannot open file");
     return;
   }
@@ -852,9 +794,11 @@ volatile void fastROMReadCore1() {
 }
 void ROMSave(uint32_t addroffset, size_t dataSize, const char *filePath) {
   if (!file.open(filePath, O_WRITE | O_CREAT)) {
+    Serial.print(filePath);
     Serial.println("File open failed.");
     return;
   }
+  bp.begin(&file);
   uint16_t addr = addroffset & 0xFFFF, segment = addroffset >> 16;
   rst();
   pwrite(0x60, 0x3);
@@ -864,8 +808,9 @@ void ROMSave(uint32_t addroffset, size_t dataSize, const char *filePath) {
     for (size_t j = 0; j < 0x10000 - addr; j = j + 2) {
       pwrite(0x61, 0x1);
       uint16_t rd = pread(0x66);
-      file.write(rd & 0xFF);
-      file.write(rd >> 8);
+    bp.print((char)(rd & 0xFF));
+    bp.print((char)(rd >> 8));
+      
     }
     dataSize -= (size_t)(0x10000 - addr);
     addroffset += (size_t)(0x10000 - addr);
@@ -877,10 +822,97 @@ void ROMSave(uint32_t addroffset, size_t dataSize, const char *filePath) {
   for (size_t j = 0; j < dataSize; j = j + 2) {
     pwrite(0x61, 0x1);
     uint16_t rd = pread(0x66);
-    file.write(rd & 0xFF);
-    file.write(rd >> 8);
+    bp.print((char)(rd & 0xFF));
+    bp.print((char)(rd >> 8));
   }
+  bp.sync();
   file.close();
+}
+
+void praseline(String commandSTR) {
+  if (commandSTR.length() > 0) {
+    parseString(commandSTR);
+    switch (pcommandType) {
+      case 'W':
+        pwrite(paddress, pdata);
+        break;
+      case 'R':
+        {
+          uint16_t result = pread(paddress);
+          Serial.print("0x");
+          Serial.println(result, HEX);
+          break;
+        }
+      case 'T':
+        pio->sm[0].clkdiv = paddress;
+        break;
+      case 'A':
+        CSRRead(paddress, pdata);
+        break;
+      case 'E':
+        flasherase(paddress);
+        break;
+      case 'B':
+        beginset();
+        break;
+      case 'F':
+        flashfill(paddress, pdata, 0xFFFF);
+        break;
+      case 'X':
+        {
+          uint32_t result = RunCommand(paddress);
+          Serial.print("R0:0x");
+          Serial.println(result >> 16, HEX);
+          Serial.print("EA:0x");
+          Serial.println(result & 0xFFFF, HEX);
+          break;
+        }
+      case 'C':
+        {
+          uint8_t arr[2];
+          arr[0] = pdata & 0xFF;
+          arr[1] = pdata >> 8;
+          flashwrite(paddress, 2, arr);
+          break;
+        }
+      case 'D':
+        flasheraseall();
+        break;
+      case 'Q':
+        flashwritemode(paddress);
+        break;
+      case 'S':
+        InitializeFlash();
+        break;
+      case 'G':
+        fastROMRead(paddress, pdata);
+        break;
+      case 'I':
+        {
+          commandSTR.trim();  // Removes leading and trailing whitespaces, including '\n'
+          int spaceIndex = commandSTR.lastIndexOf(' ');
+          String extractedString = commandSTR.substring(spaceIndex + 1);
+          //Serial.println(extractedString); //I don't know why,but when you use -o3 must use it
+          flashwritefromFlash(paddress, extractedString.c_str());
+          break;
+        }
+      case 'H':
+        {
+          commandSTR.trim();
+          int spaceIndex = commandSTR.lastIndexOf(' ');
+          String extractedString = commandSTR.substring(spaceIndex + 1);
+          //Serial.println(extractedString);  //I don't know why,but when you use -o3 must use it
+          ROMSave(paddress, pdata, extractedString.c_str());
+          break;
+        }
+      case 'K':
+      delay(paddress);
+      break;
+      default:
+        Serial.println("No Such Command");
+        break;
+    }
+  }
 }
 
 // Callback invoked when received READ10 command.
@@ -897,7 +929,6 @@ int32_t msc_read_cb(uint32_t lba, void *buffer, uint32_t bufsize) {
 // return number of written bytes (must be multiple of block size)
 int32_t msc_write_cb(uint32_t lba, uint8_t *buffer, uint32_t bufsize) {
   digitalWrite(LED_BUILTIN, HIGH);
-
   // Note: SPIFLash Block API: readBlocks/writeBlocks/syncBlocks
   // already include 4K sector caching internally. We don't need to cache it, yahhhh!!
   return flash.writeBlocks(lba, buffer, bufsize / 512) ? bufsize : -1;
@@ -908,9 +939,7 @@ int32_t msc_write_cb(uint32_t lba, uint8_t *buffer, uint32_t bufsize) {
 void msc_flush_cb(void) {
   // sync with flash
   flash.syncBlocks();
-
   // clear file system's cache to force refresh
   fatfs.cacheClear();
-
   digitalWrite(LED_BUILTIN, LOW);
 }
