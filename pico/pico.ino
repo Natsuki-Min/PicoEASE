@@ -24,7 +24,7 @@ typedef FatFile file_t;
 // file system object from SdFat
 FatVolume fatfs;
 file_t file;
-BufferedPrint<file_t,64> bp;
+BufferedPrint<file_t, 64> bp;
 Adafruit_SPIFlash flash(&flashTransport);
 Adafruit_USBD_MSC usb_msc;
 
@@ -124,7 +124,7 @@ void loop() {
         Serial.println("line too long,or you are using a Mac?LOL");
         break;
       }
-      String str=line;
+      String str = line;
       str.trim();
       praseline(str);
     }
@@ -212,9 +212,20 @@ void beginset(void) {
   }
 }
 void pio_init(void) {
-  sm = pio_claim_unused_sm(pio, false);
-  offset = pio_add_program(pio, &piopgm);
-  i2c_program_init(pio, sm, offset, PIN_SDA, PIN_SCL);
+  if (pio_can_add_program(pio, &piopgm)) {
+    sm = pio_claim_unused_sm(pio, false);
+    if (sm == -1) {
+      while (1) {
+        Serial.println("fail to claim sm");
+      }
+    }
+    offset = pio_add_program(pio, &piopgm);
+    i2c_program_init(pio, sm, offset, PIN_SDA, PIN_SCL);
+  } else {
+    while (1) {
+      Serial.println("fail to add pgm");
+    }
+  }
 }
 static inline void i2c_program_init(PIO pio, uint sm, uint offset, uint pin_sda, uint pin_scl) {
   assert(pin_scl == pin_sda + 1);
@@ -808,9 +819,8 @@ void ROMSave(uint32_t addroffset, size_t dataSize, const char *filePath) {
     for (size_t j = 0; j < 0x10000 - addr; j = j + 2) {
       pwrite(0x61, 0x1);
       uint16_t rd = pread(0x66);
-    bp.print((char)(rd & 0xFF));
-    bp.print((char)(rd >> 8));
-      
+      bp.print((char)(rd & 0xFF));
+      bp.print((char)(rd >> 8));
     }
     dataSize -= (size_t)(0x10000 - addr);
     addroffset += (size_t)(0x10000 - addr);
@@ -906,8 +916,8 @@ void praseline(String commandSTR) {
           break;
         }
       case 'K':
-      delay(paddress);
-      break;
+        delay(paddress);
+        break;
       default:
         Serial.println("No Such Command");
         break;
