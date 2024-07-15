@@ -226,6 +226,17 @@ void pio_init(void) {
       Serial.println("fail to add pgm");
     }
   }
+  pio_sm_put_blocking(pio, sm, 0x1 << 24);
+  for(int i=0;i<TIMEOUT;i++){
+    delay(1);
+    if(!pio_sm_is_rx_fifo_empty(pio, sm)){
+      pio_sm_get(pio, sm);
+      return;
+    }
+  }
+  while(1){
+    Serial.println("Your IO Is Broken,change it");
+  }
 }
 static inline void i2c_program_init(PIO pio, uint sm, uint offset, uint pin_sda, uint pin_scl) {
   assert(pin_scl == pin_sda + 1);
