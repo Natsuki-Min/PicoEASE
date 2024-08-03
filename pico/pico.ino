@@ -133,6 +133,7 @@ void loop() {
   }
   if (Serial.available() > 0) {
     String commandSTR = Serial.readStringUntil('\n');
+    commandSTR.trim();
     praseline(commandSTR);
     Serial.println("Done");
   }
@@ -140,11 +141,11 @@ void loop() {
 void waitack(void) {
   while (pread(0x0c) != 0x00) { Serial.println("ack"); }
 }
-bool rst(void) {
+void rst(void) {
   gpio_put(PIN_SDA, false);
   delayMicroseconds(1);
   gpio_put(PIN_SDA, true);
-  return (pread(0x0) == 0x480);
+  //return (pread(0x0) == 0x480);
 }
 void beginset(void) {
   gpio_put(PIN_SCL, true);
@@ -300,14 +301,53 @@ void parseString(const String &str) {
   pdata = hex[1];
   paddress = hex[0];
 }
-/*60 mode: 3read 1erase 5write
-611:read 5:erase 4 write 6:eraseall
-62 r 1f or 101f
-63 seg
-64 addr
-65 datain
-66 output
-67 unlock
+/*-------cpu registers--------
+0 r/w[0:3] cpu_status unclear(read(debug:480 run:4A0/4B0 rst:4A2)write(bit0:reset_mode bit1:(when write to bit0 turns to 1(reg62.8 also turns to 1),turns to 0 after R 0 and then excite bit0) bit2/bit3:unclear)
+1 unclear
+2 ?/w IR_debug_H instruction_register(only available in NMICE,not real IR)
+3 ?/w IR_debug_L
+4 r ER0 
+5 r EA
+6 r IB_chip instruction_bus
+7 r LR
+8 r ELR1
+9 r ELR2
+a r ELR3
+b r [LCSR,ECSR1,ECSR2,ECSR3] may put the cart before the horse
+------cpu control---------
+c r/w[?] ICON instruction_control(read(bit0:(1 when commands in IR_debug is running))write(write 1 to start running commands in IR_debug.can also run when the chip is locked,but cant read ER0 when locked.When commands in IR_debug is not intact,it will excute the instructions circularly and set r0 to 0x10.When begin to run commands,PC will be set to 0x10))
+d r/w[?] NMICECON ice_interrupt_control unclear(write(When chip is running,write 0x8 to trig ICE_interrupt.When in NMICE mode,write 0x20 then excute dw_FE7F or RTI to resume operation))
+e r/w[?] NMICEFLG ice_interrupt_flag unclear(read(reason of the interrupt))
+f
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+1a
+1b
+1c
+1d
+1e
+1f
+------password------
+44-47,4a-4f
+------serial-------
+40-43,50-53
+------flash------
+60 r/w[?] FLASHCON0 unclear(maybe mode 1:mostly used in erasing,seldom in reading(one word read). 3:mostly used in batch of reading(may increase address automaticly) 5:mostly used in writing)
+61 r/w[?] FLASHCON1 unclear(write 1 to read,4 to write,5 to erase,6 to chipersse)
+62 r/w[0:7] FLADHSTA unclear(read([8:11]:(0 idle ,1 busy),[12:15]:(unclear,often 0 in write,1 in ersse),[0:7]:(often 1f))write(unclear))
+63 ?/w FLASHA0 for segment
+64 ?/w FLASHA1 for address
+65 ?/w FLASHD0 for data input
+66 r FLASHD1 for data output
+67 r/w[?] FLASHACP (bit0 is used to enable erasing and programming the flash memory.0: Erasing and programming the flash memory is disabled (Initial value)1: Erasing and programming the flash memory is enabled)
 */
 void CSRRead(uint32_t addroffset, size_t dataSize) {
   uint16_t addr = addroffset & 0xFFFF, segment = addroffset >> 16;
@@ -397,9 +437,11 @@ void flasherase(uint32_t block) {
   j = 0;
   while ((pread(0x61) != 0x5) && (j < TIMEOUT)) { j++; }
   uint16_t value;
+  delay(50);
+  rst();
   while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) {
     j++;
-    delay(1);
+    delayMicroseconds(10);
   }
   if (j >= TIMEOUT) {
     Serial.print("0X62:0x");
@@ -408,7 +450,7 @@ void flasherase(uint32_t block) {
   }
   pwrite(0x60, 0x0);
   pwrite(0x61, 0x0);
-  delay(50);
+  
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
@@ -430,10 +472,11 @@ void flasheraseall() {
     pwrite(0x61, 0x5);            /*begin*/
     j = 0;
     while ((pread(0x61) != 0x5) && (j < TIMEOUT)) { j++; }
+    delay(50);
     uint16_t value;
     while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) {
       j++;
-      delay(1);
+      delayMicroseconds(10);
     }
     if (j >= TIMEOUT) {
       Serial.print("0X62:0x");
@@ -442,7 +485,7 @@ void flasheraseall() {
     }
     pwrite(0x60, 0x0);
     pwrite(0x61, 0x0);
-    delay(50);
+    
   }
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
@@ -493,9 +536,9 @@ void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t *data) {
         return;
       }
       j++;
-      delay(1);
+      delayMicroseconds(10);
     }
-    delayMicroseconds(30);
+    
   }
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
@@ -551,9 +594,9 @@ void flashwritefromFlash(uint32_t offset, const char *filePath) {
         return;
       }
       j++;
-      delay(1);
+      delayMicroseconds(10);
     }
-    delayMicroseconds(30);
+    
     offset += 2;
     if ((offset >> 16) != lastseg) {
       pwrite(0x63, offset >> 16);
@@ -605,9 +648,9 @@ void flashfill(uint32_t offset, uint32_t dataSize, uint16_t data) {
         return;
       }
       j++;
-      delay(1);
+      delayMicroseconds(10);
     }
-    delayMicroseconds(30);
+    
   }
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
@@ -628,9 +671,10 @@ void InitializeFlash() {
   j = 0;
   while ((pread(0x61) != 0x6) && (j < TIMEOUT)) { j++; }
   uint16_t value;
+  delay(50);
   while (((value = pread(0x62)) != 0x101F && value != 0x1F) && (j < TIMEOUT)) {
     j++;
-    delay(1);
+    delayMicroseconds(10);
   }
   if (j >= TIMEOUT) {
     Serial.print("0X62:0x");
@@ -639,7 +683,7 @@ void InitializeFlash() {
   }
   pwrite(0x60, 0x0);
   pwrite(0x61, 0x0);
-  delay(50);
+  
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
@@ -709,9 +753,9 @@ void flashwritemode(uint32_t offset) {
             return;
           }
           j++;
-          delay(1);
+          delayMicroseconds(10);
         }
-        delayMicroseconds(30);
+      
       }
       Serial.println("OK");
     }
