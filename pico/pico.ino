@@ -18,6 +18,7 @@ char pcommandType;
 uint32_t paddress;
 uint32_t pdata;
 uint offset;
+bool iswaitforvpp=true;
 volatile bool isfastmode = false;
 volatile void (*core1fun)() = nullptr;
 typedef FatFile file_t;
@@ -101,6 +102,7 @@ void setup() {
   gpio_put(PIN_SWITCH, false);
   pio_init();
 }
+
 void loop() {
 
   if (BOOTSEL) {
@@ -270,6 +272,23 @@ static inline void i2c_program_init(PIO pio, uint sm, uint offset, uint pin_sda,
   pio_sm_init(pio, sm, offset, &c);
   pio_sm_set_enabled(pio, sm, true);
 }
+void waitforvpp(uint8_t unlock)｛
+Serial.println("Plug vpp,then press any key to continue");
+ unsigned long currentMillis = millis();
+  while (!Serial.available() && !BOOTSEL && !iswaitforvpp) {
+    if (currentMillis - previousMillis >= 500) {
+      previousMillis = currentMillis;
+      digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    }
+    currentMillis = millis();
+  }
+  while (Serial.available()) {
+    Serial.read(); 
+  }
+digitalWrite(LED_BUILTIN, unlock==0x1?HIGH:LOW);
+rst();
+pwrite(0x67,unlock);
+}
 void parseString(const String &str) {
   char type;
   int hex[2] = { 0 };
@@ -424,6 +443,7 @@ String intToHexString(int num, int length) {
   return hexString;
 }
 void flasherase(uint32_t block) {
+  waitforvpp(0x1);
   rst();
   if (pread(0x67) == 0x0) {
     pwrite(0x67, 0x1); /*unlock*/
@@ -450,13 +470,15 @@ void flasherase(uint32_t block) {
   }
   pwrite(0x60, 0x0);
   pwrite(0x61, 0x0);
-  
+  gpio_put(PIN_SWITCH, false);
+  waitforvpp(0x0);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
+  
 }
 void flasheraseall() {
+  waitforvpp(0x1);
   rst();
   if (pread(0x67) == 0x0) {
     pwrite(0x67, 0x1); /*unlock*/
@@ -487,10 +509,11 @@ void flasheraseall() {
     pwrite(0x61, 0x0);
     
   }
+  gpio_put(PIN_SWITCH, false);
+  waitforvpp(0x0);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
   if (j >= TIMEOUT) {
     Serial.println("fail");
   }
@@ -498,6 +521,7 @@ void flasheraseall() {
 }
 void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t *data) {
   dataSize /= 2;
+  waitforvpp(0x1);
   rst();
   if (pread(0x67) == 0x0) {
     pwrite(0x67, 0x1); /*unlock*/
@@ -540,10 +564,12 @@ void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t *data) {
     }
     
   }
+  gpio_put(PIN_SWITCH, false);
+  waitforvpp(0x0);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
+  
 }
 void flashwritefromFlash(uint32_t offset, const char *filePath) {
   file.open(filePath);
@@ -552,7 +578,7 @@ void flashwritefromFlash(uint32_t offset, const char *filePath) {
     Serial.println("Cannot open file");
     return;
   }
-
+waitforvpp(0x1);
   rst();
   if (pread(0x67) == 0x0) {
     pwrite(0x67, 0x1); /*unlock*/
@@ -603,14 +629,16 @@ void flashwritefromFlash(uint32_t offset, const char *filePath) {
       pwrite(0x64, offset & 0xFFFF); /*write addr*/
     }
   }
+  gpio_put(PIN_SWITCH, false);
+  waitforvpp(0x0);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
   file.close();
 }
 void flashfill(uint32_t offset, uint32_t dataSize, uint16_t data) {
   dataSize /= 2;
+  waitforvpp(0x1);
   rst();
   if (pread(0x67) == 0x0) {
     pwrite(0x67, 0x1); /*unlock*/
@@ -652,12 +680,15 @@ void flashfill(uint32_t offset, uint32_t dataSize, uint16_t data) {
     }
     
   }
+  gpio_put(PIN_SWITCH, false);
+  waitforvpp(0x0);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
+
 }
 void InitializeFlash() {
+  waitforvpp(0x1);
   rst();
   if (pread(0x67) == 0x0) {
     pwrite(0x67, 0x1); /*unlock*/
@@ -687,8 +718,9 @@ void InitializeFlash() {
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  flashfill(0xfc00, 0x200, 0xffff);
   gpio_put(PIN_SWITCH, false);
+  waitforvpp(0x0);
+  flashfill(0xfc00, 0x200, 0xffff);
 }
 uint32_t RunCommand(uint32_t command) {
   pwrite(0x2, command >> 16);
@@ -699,6 +731,7 @@ uint32_t RunCommand(uint32_t command) {
 }
 void flashwritemode(uint32_t offset) {
   uint32_t dataSize = 0;
+  waitforvpp(0x1);
   rst();
   if (pread(0x67) == 0x0) {
     pwrite(0x67, 0x1); /*unlock*/
@@ -759,11 +792,11 @@ void flashwritemode(uint32_t offset) {
       }
       Serial.println("OK");
     }
-  }
+  }gpio_put(PIN_SWITCH, false);
+  waitforvpp(0x0);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
 }
 #define QUEUE_LENGTH 65536
 
@@ -971,7 +1004,10 @@ void praseline(String commandSTR) {
           break;
         }
       case 'K':
-        delay(paddress);
+        if(paddress==0xFFFFFFFF)
+          iswaitforvpp=false;
+        else
+          delay(paddress);
         break;
       default:
         Serial.println("No Such Command");
