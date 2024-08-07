@@ -12,6 +12,8 @@
 #define PIN_SDA 2u
 #define PIN_SWITCH 4u
 #define TIMEOUT 1000
+#define VPPdelay 50
+
 PIO pio = pio0;
 uint sm;
 char pcommandType;
@@ -97,12 +99,11 @@ void setup() {
   // Init file system on the flash
   if (!fatfs.begin(&flash)) {
     Serial.println("Please format your pico first");
-  }
+  }pinMode(PIN_SWITCH, OUTPUT);
   gpio_put(PIN_SWITCH, false);
   pio_init();
 }
 void loop() {
-
   if (BOOTSEL) {
     file_t file2;
     while (BOOTSEL) { tight_loop_contents(); }
@@ -450,11 +451,12 @@ void flasherase(uint32_t block) {
   }
   pwrite(0x60, 0x0);
   pwrite(0x61, 0x0);
-  
+  gpio_put(PIN_SWITCH, false);
+  delay(VPPdelay);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
+  
 }
 void flasheraseall() {
   rst();
@@ -462,6 +464,7 @@ void flasheraseall() {
     pwrite(0x67, 0x1); /*unlock*/
   }
   gpio_put(PIN_SWITCH, true);
+  delay(VPPdelay);
   uint32_t block = 0;
   int j;
   for (int i = 0; i < 16; i++) {
@@ -486,11 +489,11 @@ void flasheraseall() {
     pwrite(0x60, 0x0);
     pwrite(0x61, 0x0);
     
-  }
+  }gpio_put(PIN_SWITCH, false);delay(VPPdelay);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
+  
   if (j >= TIMEOUT) {
     Serial.println("fail");
   }
@@ -503,6 +506,7 @@ void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t *data) {
     pwrite(0x67, 0x1); /*unlock*/
   }
   gpio_put(PIN_SWITCH, true);
+  delay(VPPdelay);
   pwrite(0x60, 0x5); /*enter write mode*/
   pwrite(0x63, offset >> 16);
   pwrite(0x64, offset & 0xFFFF); /*write addr*/
@@ -539,11 +543,11 @@ void flashwrite(uint32_t offset, uint32_t dataSize, const uint8_t *data) {
       delayMicroseconds(10);
     }
     
-  }
+  }gpio_put(PIN_SWITCH, false);delay(VPPdelay);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
+  
 }
 void flashwritefromFlash(uint32_t offset, const char *filePath) {
   file.open(filePath);
@@ -557,7 +561,9 @@ void flashwritefromFlash(uint32_t offset, const char *filePath) {
   if (pread(0x67) == 0x0) {
     pwrite(0x67, 0x1); /*unlock*/
   }
+  
   gpio_put(PIN_SWITCH, true);
+  delay(VPPdelay);
   pwrite(0x60, 0x5); /*enter write mode*/
   pwrite(0x63, offset >> 16);
   pwrite(0x64, offset & 0xFFFF); /*write addr*/
@@ -602,11 +608,11 @@ void flashwritefromFlash(uint32_t offset, const char *filePath) {
       pwrite(0x63, offset >> 16);
       pwrite(0x64, offset & 0xFFFF); /*write addr*/
     }
-  }
+  }gpio_put(PIN_SWITCH, false);delay(VPPdelay);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
+  
   file.close();
 }
 void flashfill(uint32_t offset, uint32_t dataSize, uint16_t data) {
@@ -616,6 +622,7 @@ void flashfill(uint32_t offset, uint32_t dataSize, uint16_t data) {
     pwrite(0x67, 0x1); /*unlock*/
   }
   gpio_put(PIN_SWITCH, true);
+  delay(VPPdelay);
   pwrite(0x60, 0x5); /*enter write mode*/
   pwrite(0x63, offset >> 16);
   pwrite(0x64, offset & 0xFFFF); /*write addr*/
@@ -651,11 +658,11 @@ void flashfill(uint32_t offset, uint32_t dataSize, uint16_t data) {
       delayMicroseconds(10);
     }
     
-  }
+  }gpio_put(PIN_SWITCH, false);delay(VPPdelay);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
+  
 }
 void InitializeFlash() {
   rst();
@@ -663,6 +670,7 @@ void InitializeFlash() {
     pwrite(0x67, 0x1); /*unlock*/
   }
   gpio_put(PIN_SWITCH, true);
+  delay(VPPdelay);
   pwrite(0x60, 0x1); /*enter erase mode*/
   pwrite(0x63, 0x0);
   pwrite(0x64, 0x0); /*write addr*/
@@ -683,12 +691,12 @@ void InitializeFlash() {
   }
   pwrite(0x60, 0x0);
   pwrite(0x61, 0x0);
-  
+  gpio_put(PIN_SWITCH, false);delay(VPPdelay);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
   flashfill(0xfc00, 0x200, 0xffff);
-  gpio_put(PIN_SWITCH, false);
+  
 }
 uint32_t RunCommand(uint32_t command) {
   pwrite(0x2, command >> 16);
@@ -704,6 +712,7 @@ void flashwritemode(uint32_t offset) {
     pwrite(0x67, 0x1); /*unlock*/
   }
   gpio_put(PIN_SWITCH, true);
+  delay(VPPdelay);
   pwrite(0x60, 0x5); /*enter write mode*/
   pwrite(0x63, offset >> 16);
   pwrite(0x64, offset & 0xFFFF); /*write addr*/
@@ -759,11 +768,11 @@ void flashwritemode(uint32_t offset) {
       }
       Serial.println("OK");
     }
-  }
+  }gpio_put(PIN_SWITCH, false);delay(VPPdelay);
   if (pread(0x67) == 0x1) {
     pwrite(0x67, 0x0); /*lock*/
   }
-  gpio_put(PIN_SWITCH, false);
+ 
 }
 #define QUEUE_LENGTH 65536
 
